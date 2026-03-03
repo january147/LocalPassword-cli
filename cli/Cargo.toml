@@ -1,0 +1,19 @@
+[package]
+name = "password-manager-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "pm"
+path = "src/main.rs"
+
+[dependencies]
+password-manager-core = { path = "../core" }
+clap.workspace = true
+inquire.workspace = true
+dialoguer.workspace = true
+arboard.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+colored = "2.1"

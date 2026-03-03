@@ -1,0 +1,51 @@
+[workspace]
+members = [
+    "core",
+    "cli"
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Password Manager Team"]
+license = "MIT"
+
+[workspace.dependencies]
+# 加密库
+aes-gcm = "0.10"
+argon2 = "0.5"
+rand = "0.8"
+base64 = "0.21"
+hex = "0.4"
+
+# 序列化
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# CLI
+clap = { version = "4.5", features = ["derive"] }
+inquire = "0.7"
+dialoguer = "0.11"
+
+# GUI
+eframe = "0.27"
+egui = "0.27"
+egui_extras = { version = "0.27", features = ["all"] }
+
+# 数据库
+rusqlite = { version = "0.30", features = ["bundled"] }
+
+# 错误处理
+anyhow = "1.0"
+thiserror = "1.0"
+
+# 日志
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# 复制剪贴板
+arboard = "3.3"
+
+# 密码强度
+zxcvbn = "2.2"
