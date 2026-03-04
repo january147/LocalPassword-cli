@@ -1,31 +1,33 @@
 #!/bin/bash
-# 密码管理器 GUI 启动脚本
+# Password Manager GUI Launcher
 
-# 获取脚本所在目录
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# 密码管理器可执行文件路径
-PM_BIN="$SCRIPT_DIR/target/release/pm"
-
-# GUI 脚本路径
-GUI_SCRIPT="$SCRIPT_DIR/gui/password_manager_gui.py"
-
-# 检查密码管理器是否存在
-if [ ! -f "$PM_BIN" ]; then
-    echo "错误: 找不到密码管理器可执行文件"
-    echo "请先编译密码管理器: cargo build --release"
+# Check if Python 3 is available
+if ! command -v python3 &> /dev/null; then
+    echo "Error: Python 3 is not installed"
     exit 1
 fi
 
-# 检查 GUI 脚本是否存在
-if [ ! -f "$GUI_SCRIPT" ]; then
-    echo "错误: 找不到 GUI 脚本"
+# Check if pm CLI is available
+if ! command -v pm &> /dev/null; then
+    echo "Error: pm CLI is not found in PATH"
+    echo "Please build the CLI first: cargo build --release"
+    echo "Then add it to PATH or run from the project directory"
     exit 1
 fi
 
-# 确保 pm 可执行
-chmod +x "$PM_BIN"
+# Install dependencies if needed
+if [ ! -d "$SCRIPT_DIR/venv" ]; then
+    echo "Installing Python dependencies..."
+    python3 -m venv "$SCRIPT_DIR/venv"
+    source "$SCRIPT_DIR/venv/bin/activate"
+    pip install -r "$SCRIPT_DIR/requirements.txt"
+else
+    source "$SCRIPT_DIR/venv/bin/activate"
+fi
 
-# 运行 GUI
-cd "$SCRIPT_DIR"
-python3 "$GUI_SCRIPT"
+# Run the GUI
+python3 "$SCRIPT_DIR/password_manager.py"

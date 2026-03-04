@@ -1,32 +1,36 @@
 @echo off
-REM 密码管理器 GUI 启动脚本 (Windows)
+REM Password Manager GUI Launcher for Windows
 
-REM 获取脚本所在目录
+REM Get the directory where this script is located
 set SCRIPT_DIR=%~dp0
 
-REM 密码管理器可执行文件路径
-set PM_BIN=%SCRIPT_DIR%target\release\pm.exe
-
-REM GUI 脚本路径
-set GUI_SCRIPT=%SCRIPT_DIR%gui\password_manager_gui.py
-
-REM 检查密码管理器是否存在
-if not exist "%PM_BIN%" (
-    echo 错误: 找不到密码管理器可执行文件
-    echo 请先编译密码管理器: cargo build --release
+REM Check if Python is available
+python --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo Error: Python is not installed or not in PATH
     pause
     exit /b 1
 )
 
-REM 检查 GUI 脚本是否存在
-if not exist "%GUI_SCRIPT%" (
-    echo 错误: 找不到 GUI 脚本
+REM Check if pm CLI is available
+pm --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo Error: pm CLI is not found in PATH
+    echo Please build the CLI first: cargo build --release
+    echo Then add it to PATH or run from the project directory
     pause
     exit /b 1
 )
 
-REM 运行 GUI
-cd /d "%SCRIPT_DIR%"
-python "%GUI_SCRIPT%"
+REM Install dependencies if needed
+if not exist "%SCRIPT_DIR%venv" (
+    echo Installing Python dependencies...
+    python -m venv "%SCRIPT_DIR%venv"
+    call "%SCRIPT_DIR%venv\Scripts\activate.bat"
+    pip install -r "%SCRIPT_DIR%requirements.txt"
+) else (
+    call "%SCRIPT_DIR%venv\Scripts\activate.bat"
+)
 
-pause
+REM Run the GUI
+python "%SCRIPT_DIR%gui_new\password_manager.py"

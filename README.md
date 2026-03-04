@@ -60,7 +60,7 @@ pm add --title "GitHub" --username "user@example.com" --generate
 - **[CLI 使用指南](./docs/cli-guide.md)** - 命令行工具详细使用说明
 - **[GUI 集成指南](./docs/gui-integration.md)** - 如何将 CLI 集成到 GUI 应用
 - **[日志指南](./docs/logging-guide.md)** - 日志功能使用指南
-- **[GUI 说明](./gui/README.md)** - 图形界面使用说明
+- **[GUI 使用说明](./gui_new/README.md)** - 现代化 GUI 完整使用指南
 
 ## 🏗️ 项目结构
 
@@ -77,13 +77,10 @@ password-manager/
 │       ├── database.rs
 │       ├── entry.rs
 │       └── password_generator.rs
-├── gui/                    # 图形界面
-│   ├── password_manager_gui.py
-│   ├── password_manager_gui_v2.py
-│   ├── password_manager_gui_cli.py
-│   ├── password_strength.py
-│   ├── theme_manager.py
-│   └── README.md
+├── gui_new/                # 现代化图形界面
+│   ├── password_manager.py  # GUI 主程序
+│   ├── requirements.txt     # Python 依赖
+│   └── README.md          # GUI 使用说明
 ├── docs/                   # 文档
 │   ├── cli-guide.md
 │   ├── gui-integration.md
@@ -92,6 +89,8 @@ password-manager/
 ├── .github/
 │   └── workflows/
 │       └── build.yml      # GitHub Actions
+├── run_gui.sh             # GUI 启动脚本 (Linux/Mac)
+├── run_gui.bat            # GUI 启动脚本 (Windows)
 ├── Cargo.toml
 ├── Cargo.lock
 ├── .gitignore
@@ -158,7 +157,32 @@ pm list
 
 ## 🖥️ GUI 使用
 
-### 启动 GUI
+### 现代化 GUI
+
+基于 CustomTkinter 的新 GUI，提供现代化的用户体验：
+
+**特性：**
+- 🎨 现代化深色主题
+- 🔍 实时搜索
+- 📋 一键复制密码
+- 🔢 内置密码生成器
+- 📤 导出/导入支持
+- 🧵 多线程异步操作
+
+#### 安装依赖
+
+```bash
+pip3 install -r gui_new/requirements.txt
+```
+
+或使用虚拟环境（推荐）：
+```bash
+python3 -m venv gui_new/venv
+source gui_new/venv/bin/activate
+pip install -r gui_new/requirements.txt
+```
+
+#### 启动 GUI
 
 **Linux/Mac:**
 ```bash
@@ -173,16 +197,10 @@ run_gui.bat
 
 **直接运行:**
 ```bash
-python3 gui/password_manager_gui.py
+python3 gui_new/password_manager.py
 ```
 
-### GUI 版本
-
-项目提供三个 GUI 版本：
-
-1. **password_manager_gui.py** - 标准 GUI（推荐）
-2. **password_manager_gui_v2.py** - 增强版 GUI
-3. **password_manager_gui_cli.py** - CLI 集成版 GUI
+详细文档：[GUI 使用说明](./gui_new/README.md)
 
 ## 🔐 安全性
 
