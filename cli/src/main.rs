@@ -23,10 +23,6 @@ struct Cli {
     #[arg(value_name = "PASSWORD")]
     master_password: Option<String>,
 
-    /// Non-interactive mode (skip all prompts, use defaults)
-    #[arg(long, global = true)]
-    non_interactive: bool,
-
     /// Enable logging (or use PM_LOG env var)
     #[arg(long, global = true)]
     log: bool,
@@ -230,7 +226,7 @@ fn init_logger(cli: &Cli) {
     }
 }
 
-fn open_database(path: &PathBuf, master_password_opt: Option<String>, non_interactive: bool) -> Result<Database> {
+fn open_database(path: &PathBuf, master_password_opt: Option<String>) -> Result<Database> {
     log::debug!("Attempting to open database at: {}", path.display());
 
     use dialoguer::Password;
@@ -245,11 +241,8 @@ fn open_database(path: &PathBuf, master_password_opt: Option<String>, non_intera
             if let Ok(env_pwd) = std::env::var("PM_MASTER_PASSWORD") {
                 log::debug!("Using master password from PM_MASTER_PASSWORD env var");
                 env_pwd
-            } else if non_interactive {
-                log::error!("Master password required but none provided in non-interactive mode");
-                return Err(anyhow::anyhow!("Master password required. Use --master-password or PM_MASTER_PASSWORD env var"));
             } else {
-                // Interactive mode
+                // Interactive mode - prompt for password
                 log::debug!("Prompting for master password interactively");
                 Password::new()
                     .with_prompt("Enter master password:")
@@ -368,11 +361,11 @@ fn main() -> Result<()> {
         } => {
             log::info!("Adding new password entry...");
 
-            let db = open_database(&db_path, cli.master_password.clone(), cli.non_interactive)?;
+            let db = open_database(&db_path, cli.master_password.clone())?;
 
             use dialoguer::{Input, Password, Confirm};
 
-            // Prompt for missing fields
+            // Prompt for missing fields only
             let title = match title {
                 Some(t) => t,
                 None => Input::new()
@@ -476,7 +469,7 @@ fn main() -> Result<()> {
         Commands::List { category, search, show_passwords } => {
             log::info!("Listing passwords (category: {:?}, search: {:?})", category, search);
 
-            let db = open_database(&db_path, cli.master_password.clone(), cli.non_interactive)?;
+            let db = open_database(&db_path, cli.master_password.clone())?;
             let entries = db.list_passwords()?;
 
             if entries.is_empty() {
@@ -486,11 +479,6 @@ fn main() -> Result<()> {
             }
 
             log::info!("Found {} entries before filtering", entries.len());
-
-            if entries.is_empty() {
-                println!("{}", "No password entries found.".yellow());
-                return Ok(());
-            }
 
             let mut filtered: Vec<_> = entries.into_iter().collect();
 
@@ -519,7 +507,7 @@ fn main() -> Result<()> {
         }
 
         Commands::Get { title, copy, show_password } => {
-            let db = open_database(&db_path, cli.master_password.clone(), cli.non_interactive)?;
+            let db = open_database(&db_path, cli.master_password.clone())?;
             let entries = db.list_passwords()?;
 
             // Try to find by ID first, then by title
@@ -542,7 +530,7 @@ fn main() -> Result<()> {
         }
 
         Commands::Search { query, username, url, category } => {
-            let db = open_database(&db_path, cli.master_password.clone(), cli.non_interactive)?;
+            let db = open_database(&db_path, cli.master_password.clone())?;
             let _entries = db.list_passwords()?;
 
             let mut search_query = SearchQuery::new();
@@ -571,10 +559,10 @@ fn main() -> Result<()> {
         }
 
         Commands::Edit { title } => {
-            let db = open_database(&db_path, cli.master_password.clone(), cli.non_interactive)?;
+            let db = open_database(&db_path, cli.master_password.clone())?;
             let entries = db.list_passwords()?;
 
-            // Find the entry to edit
+            // Find entry to edit
             let entry = if let Ok(id) = title.parse::<i64>() {
                 entries.into_iter().find(|e| e.id == Some(id))
             } else {
@@ -630,7 +618,7 @@ fn main() -> Result<()> {
         Commands::Delete { title, force } => {
             log::info!("Deleting password entry: title='{}', force={}", title, force);
 
-            let db = open_database(&db_path, cli.master_password.clone(), cli.non_interactive)?;
+            let db = open_database(&db_path, cli.master_password.clone())?;
             let entries = db.list_passwords()?;
 
             let entry = if let Ok(id) = title.parse::<i64>() {
@@ -723,7 +711,7 @@ fn main() -> Result<()> {
         }
 
         Commands::Export { path, include_passwords } => {
-            let db = open_database(&db_path, cli.master_password.clone(), cli.non_interactive)?;
+            let db = open_database(&db_path, cli.master_password.clone())?;
             let entries = db.list_passwords()?;
 
             let export_data: Vec<_> = entries.iter().map(|e| {
@@ -759,7 +747,7 @@ fn main() -> Result<()> {
             let json = std::fs::read_to_string(&path)?;
             let imported: Vec<serde_json::Value> = serde_json::from_str(&json)?;
 
-            let db = open_database(&db_path, cli.master_password.clone(), cli.non_interactive)?;
+            let db = open_database(&db_path, cli.master_password.clone())?;
 
             for item in imported {
                 if let (Some(title), Some(username)) = (
