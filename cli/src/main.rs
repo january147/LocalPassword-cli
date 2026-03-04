@@ -18,6 +18,23 @@ struct Cli {
     #[arg(value_name = "FILE")]
     db: Option<PathBuf>,
 
+    /// Master password (or use PM_MASTER_PASSWORD env var)
+    #[arg(long, global = true)]
+    #[arg(value_name = "PASSWORD")]
+    master_password: Option<String>,
+
+    /// Non-interactive mode (skip all prompts, use defaults)
+    #[arg(long, global = true)]
+    non_interactive: bool,
+
+    /// Enable logging (or use PM_LOG env var)
+    #[arg(long, global = true)]
+    log: bool,
+
+    /// Log level (off, error, warn, info, debug, trace)
+    #[arg(long, global = true, default_value = "info")]
+    log_level: String,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -189,15 +206,71 @@ fn get_db_path(cli_db: Option<PathBuf>) -> PathBuf {
     })
 }
 
-fn open_database(path: &PathBuf) -> Result<Database> {
+fn init_logger(cli: &Cli) {
+    // Check if logging is enabled (either via flag or env var)
+    let log_enabled = cli.log || std::env::var("PM_LOG").is_ok();
+
+    if log_enabled {
+        let log_level = match cli.log_level.as_str() {
+            "off" => "off",
+            "error" => "error",
+            "warn" => "warn",
+            "info" => "info",
+            "debug" => "debug",
+            "trace" => "trace",
+            _ => "info",
+        };
+
+        env_logger::Builder::from_env(env_logger::Env::default()
+            .default_filter_or(log_level))
+            .format_timestamp_secs()
+            .init();
+
+        log::info!("Logging enabled at level: {}", log_level);
+    }
+}
+
+fn open_database(path: &PathBuf, master_password_opt: Option<String>, non_interactive: bool) -> Result<Database> {
+    log::debug!("Attempting to open database at: {}", path.display());
+
     use dialoguer::Password;
 
-    let master_password = Password::new()
-        .with_prompt("Enter master password:")
-        .interact()?;
+    let master_password = match master_password_opt {
+        Some(pwd) => {
+            log::debug!("Using master password from command-line argument");
+            pwd
+        }
+        None => {
+            // Check environment variable
+            if let Ok(env_pwd) = std::env::var("PM_MASTER_PASSWORD") {
+                log::debug!("Using master password from PM_MASTER_PASSWORD env var");
+                env_pwd
+            } else if non_interactive {
+                log::error!("Master password required but none provided in non-interactive mode");
+                return Err(anyhow::anyhow!("Master password required. Use --master-password or PM_MASTER_PASSWORD env var"));
+            } else {
+                // Interactive mode
+                log::debug!("Prompting for master password interactively");
+                Password::new()
+                    .with_prompt("Enter master password:")
+                    .interact()?
+            }
+        }
+    };
 
-    Database::open(path, &master_password)
-        .context("Failed to open database. Check your master password.")
+    log::info!("Opening database...");
+    let result = Database::open(path, &master_password);
+
+    match &result {
+        Ok(_) => {
+            log::info!("Database opened successfully");
+        }
+        Err(e) => {
+            log::error!("Failed to open database: {}", e);
+        }
+    }
+
+    result.context("Failed to open database. Check your master password.")
 }
 
 fn format_entry(entry: &PasswordEntry, show_password: bool) -> String {
@@ -230,10 +303,20 @@ fn format_entry(entry: &PasswordEntry, show_password: bool) -> String {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    // Initialize logging
+    init_logger(&cli);
+
+    log::info!("Password Manager CLI starting...");
+    log::debug!("Parsed CLI arguments: {:?}", cli);
+
     let db_path = get_db_path(cli.db);
+    log::info!("Using database at: {}", db_path.display());
 
     match cli.command {
         Commands::Init { force } => {
+            log::info!("Initializing new database (force: {})", force);
+
             if db_path.exists() && !force {
                 use dialoguer::Confirm;
                 let confirm = Confirm::new()
@@ -242,6 +325,7 @@ fn main() -> Result<()> {
                     .interact()?;
 
                 if !confirm {
+                    log::info!("Init cancelled by user");
                     println!("Cancelled.");
                     return Ok(());
                 }
@@ -249,6 +333,7 @@ fn main() -> Result<()> {
 
             // 删除旧数据库文件（如果存在）
             if db_path.exists() {
+                log::info!("Removing existing database file");
                 std::fs::remove_file(&db_path)
                     .context("Failed to remove old database file")?;
             }
@@ -261,9 +346,11 @@ fn main() -> Result<()> {
                 .with_confirmation("Confirm master password:", "Passwords do not match")
                 .interact()?;
 
+            log::info!("Creating new database...");
             Database::new(&db_path, &master_password)
                 .context("Failed to create database")?;
 
+            log::info!("Database created successfully");
             println!("{}", "✓ Database created successfully!".green());
             println!("  Location: {}", db_path.display());
             println!("\nKeep your master password safe. It cannot be recovered.");
@@ -279,7 +366,9 @@ fn main() -> Result<()> {
             generate,
             copy,
         } => {
-            let db = open_database(&db_path)?;
+            log::info!("Adding new password entry...");
+
+            let db = open_database(&db_path, cli.master_password.clone(), cli.non_interactive)?;
 
             use dialoguer::{Input, Password, Confirm};
 
@@ -371,18 +460,32 @@ fn main() -> Result<()> {
                 entry = entry.with_notes(n);
             }
 
+            log::info!("Adding password entry: title='{}', username='{}'", entry.title, entry.username);
             db.add_password(entry)?;
+            log::info!("Password entry added successfully");
+
             println!("{}", "\n✓ Password entry added successfully!".green());
 
             if copy {
+                log::info!("Copying password to clipboard");
                 // Copy password logic would go here
                 println!("Password copied to clipboard");
             }
         }
 
         Commands::List { category, search, show_passwords } => {
-            let db = open_database(&db_path)?;
+            log::info!("Listing passwords (category: {:?}, search: {:?})", category, search);
+
+            let db = open_database(&db_path, cli.master_password.clone(), cli.non_interactive)?;
             let entries = db.list_passwords()?;
+
+            if entries.is_empty() {
+                log::info!("No password entries found");
+                println!("{}", "No password entries found.".yellow());
+                return Ok(());
+            }
+
+            log::info!("Found {} entries before filtering", entries.len());
 
             if entries.is_empty() {
                 println!("{}", "No password entries found.".yellow());
@@ -416,7 +519,7 @@ fn main() -> Result<()> {
         }
 
         Commands::Get { title, copy, show_password } => {
-            let db = open_database(&db_path)?;
+            let db = open_database(&db_path, cli.master_password.clone(), cli.non_interactive)?;
             let entries = db.list_passwords()?;
 
             // Try to find by ID first, then by title
@@ -439,7 +542,7 @@ fn main() -> Result<()> {
         }
 
         Commands::Search { query, username, url, category } => {
-            let db = open_database(&db_path)?;
+            let db = open_database(&db_path, cli.master_password.clone(), cli.non_interactive)?;
             let entries = db.list_passwords()?;
 
             let mut search_query = SearchQuery::new();
@@ -468,7 +571,7 @@ fn main() -> Result<()> {
         }
 
         Commands::Edit { title } => {
-            let db = open_database(&db_path)?;
+            let db = open_database(&db_path, cli.master_password.clone(), cli.non_interactive)?;
             let entries = db.list_passwords()?;
 
             // Find the entry to edit
@@ -527,7 +630,9 @@ fn main() -> Result<()> {
         }
 
         Commands::Delete { title, force } => {
-            let db = open_database(&db_path)?;
+            log::info!("Deleting password entry: title='{}', force={}", title, force);
+
+            let db = open_database(&db_path, cli.master_password.clone(), cli.non_interactive)?;
             let entries = db.list_passwords()?;
 
             let entry = if let Ok(id) = title.parse::<i64>() {
@@ -556,13 +661,16 @@ fn main() -> Result<()> {
                     .interact()?;
 
                 if !confirm {
+                    log::info!("Delete cancelled by user");
                     println!("Cancelled.");
                     return Ok(());
                 }
             }
 
             if let Some(id) = entry.id {
+                log::info!("Deleting password entry with ID: {}", id);
                 db.delete_password(id)?;
+                log::info!("Entry deleted successfully");
                 println!("{}", "\n✓ Entry deleted successfully!".green());
             }
         }
@@ -617,7 +725,7 @@ fn main() -> Result<()> {
         }
 
         Commands::Export { path, include_passwords } => {
-            let db = open_database(&db_path)?;
+            let db = open_database(&db_path, cli.master_password.clone(), cli.non_interactive)?;
             let entries = db.list_passwords()?;
 
             let export_data: Vec<_> = entries.iter().map(|e| {
@@ -653,7 +761,7 @@ fn main() -> Result<()> {
             let json = std::fs::read_to_string(&path)?;
             let imported: Vec<serde_json::Value> = serde_json::from_str(&json)?;
 
-            let db = open_database(&db_path)?;
+            let db = open_database(&db_path, cli.master_password.clone(), cli.non_interactive)?;
 
             for item in imported {
                 if let (Some(title), Some(username)) = (
@@ -688,21 +796,31 @@ fn main() -> Result<()> {
         }
 
         Commands::Shell => {
-            run_interactive_shell(&db_path)?;
+            run_interactive_shell(&db_path, cli.master_password)?;
         }
     }
 
     Ok(())
 }
 
-fn run_interactive_shell(db_path: &PathBuf) -> Result<()> {
+fn run_interactive_shell(db_path: &PathBuf, master_password_opt: Option<String>) -> Result<()> {
     use dialoguer::Password;
     use std::io::{self, Write, BufRead};
 
     // 输入主密码
-    let master_password = Password::new()
-        .with_prompt("Enter master password:")
-        .interact()?;
+    let master_password = match master_password_opt {
+        Some(pwd) => pwd,
+        None => {
+            // Check environment variable
+            if let Ok(env_pwd) = std::env::var("PM_MASTER_PASSWORD") {
+                env_pwd
+            } else {
+                Password::new()
+                    .with_prompt("Enter master password:")
+                    .interact()?
+            }
+        }
+    };
 
     // 打开数据库
     let db = Database::open(db_path, &master_password)
