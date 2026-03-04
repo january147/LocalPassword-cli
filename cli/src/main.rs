@@ -8,7 +8,7 @@ use password_manager_core::{
 };
 
 /// Password Manager CLI
-#[derive(Parser)]
+#[derive(Parser, Debug)]
 #[command(name = "pm")]
 #[command(about = "A secure password manager", long_about = None)]
 #[command(version = "0.1.0")]
@@ -39,7 +39,7 @@ struct Cli {
     command: Commands,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Debug)]
 enum Commands {
     /// Initialize a new password database
     Init {
@@ -543,7 +543,7 @@ fn main() -> Result<()> {
 
         Commands::Search { query, username, url, category } => {
             let db = open_database(&db_path, cli.master_password.clone(), cli.non_interactive)?;
-            let entries = db.list_passwords()?;
+            let _entries = db.list_passwords()?;
 
             let mut search_query = SearchQuery::new();
 
@@ -582,15 +582,13 @@ fn main() -> Result<()> {
                 entries.into_iter().find(|e| e.title.to_lowercase() == query)
             };
 
-            let mut entry = match entry {
+            let entry = match entry {
                 Some(e) => e,
                 None => {
                     println!("{}", "Entry not found.".red());
                     return Ok(());
                 }
             };
-
-            let mut entry = entry.clone();
 
             println!("\nEditing: {}", entry.title.yellow());
             println!("{}", format_entry(&entry, false));
@@ -928,7 +926,7 @@ fn run_interactive_shell(db_path: &PathBuf, master_password_opt: Option<String>)
     Ok(())
 }
 
-fn shell_list(db: &Database, args: &[&str]) {
+fn shell_list(db: &Database, _args: &[&str]) {
     match db.list_passwords() {
         Ok(entries) => {
             if entries.is_empty() {
@@ -1105,7 +1103,7 @@ fn shell_edit(db: &Database, args: &[&str]) {
         entries.into_iter().find(|e| e.title.to_lowercase() == query)
     };
 
-    let mut entry = match entry {
+    let entry = match entry {
         Some(e) => e,
         None => {
             println!("{}", "Entry not found.".red());
