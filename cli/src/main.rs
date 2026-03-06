@@ -313,8 +313,8 @@ fn main() -> Result<()> {
     log::info!("Password Manager CLI starting...");
     log::debug!("Parsed CLI arguments: {:?}", cli);
 
-    let db_path = get_db_path(cli.db);
     let non_interactive = is_non_interactive(&cli);
+    let db_path = get_db_path(cli.db);
     log::info!("Using database at: {}", db_path.display());
     log::debug!("Non-interactive mode: {}", non_interactive);
 
