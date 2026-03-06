@@ -31,6 +31,10 @@ struct Cli {
     #[arg(long, global = true, default_value = "info")]
     log_level: String,
 
+    /// Non-interactive mode (no prompts, fail on missing parameters)
+    #[arg(long, global = true)]
+    non_interactive: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -202,6 +206,10 @@ fn get_db_path(cli_db: Option<PathBuf>) -> PathBuf {
     })
 }
 
+fn is_non_interactive(cli: &Cli) -> bool {
+    cli.non_interactive || std::env::var("PM_NON_INTERACTIVE").is_ok()
+}
+
 fn init_logger(cli: &Cli) {
     // Check if logging is enabled (either via flag or env var)
     let log_enabled = cli.log || std::env::var("PM_LOG").is_ok();
@@ -226,10 +234,8 @@ fn init_logger(cli: &Cli) {
     }
 }
 
-fn open_database(path: &PathBuf, master_password_opt: Option<String>) -> Result<Database> {
+fn open_database(path: &PathBuf, master_password_opt: Option<String>, non_interactive: bool) -> Result<Database> {
     log::debug!("Attempting to open database at: {}", path.display());
-
-    use dialoguer::Password;
 
     let master_password = match master_password_opt {
         Some(pwd) => {
@@ -241,8 +247,12 @@ fn open_database(path: &PathBuf, master_password_opt: Option<String>) -> Result<
             if let Ok(env_pwd) = std::env::var("PM_MASTER_PASSWORD") {
                 log::debug!("Using master password from PM_MASTER_PASSWORD env var");
                 env_pwd
+            } else if non_interactive {
+                // Non-interactive mode - fail instead of prompting
+                anyhow::bail!("Master password not provided. Use --master-password argument or PM_MASTER_PASSWORD environment variable in non-interactive mode.");
             } else {
                 // Interactive mode - prompt for password
+                use dialoguer::Password;
                 log::debug!("Prompting for master password interactively");
                 Password::new()
                     .with_prompt("Enter master password:")
@@ -304,13 +314,20 @@ fn main() -> Result<()> {
     log::debug!("Parsed CLI arguments: {:?}", cli);
 
     let db_path = get_db_path(cli.db);
+    let non_interactive = is_non_interactive(&cli);
     log::info!("Using database at: {}", db_path.display());
+    log::debug!("Non-interactive mode: {}", non_interactive);
 
     match cli.command {
         Commands::Init { force } => {
             log::info!("Initializing new database (force: {})", force);
 
             if db_path.exists() && !force {
+                if non_interactive {
+                    log::info!("Database already exists and --force not specified, aborting in non-interactive mode");
+                    anyhow::bail!("Database already exists at {}. Use --force to overwrite or remove it manually.", db_path.display());
+                }
+
                 use dialoguer::Confirm;
                 let confirm = Confirm::new()
                     .with_prompt(format!("Database already exists at {}. Overwrite?", db_path.display()))
@@ -361,25 +378,35 @@ fn main() -> Result<()> {
         } => {
             log::info!("Adding new password entry...");
 
-            let db = open_database(&db_path, cli.master_password.clone())?;
+            let db = open_database(&db_path, cli.master_password.clone(), non_interactive)?;
 
             use dialoguer::{Input, Password, Confirm};
 
             // Prompt for missing fields only
             let title = match title {
                 Some(t) => t,
-                None => Input::new()
-                    .with_prompt("Entry title")
-                    .with_initial_text("")
-                    .interact_text()?,
+                None => {
+                    if non_interactive {
+                        anyhow::bail!("Missing required parameter: --title is required in non-interactive mode");
+                    }
+                    Input::new()
+                        .with_prompt("Entry title")
+                        .with_initial_text("")
+                        .interact_text()?
+                }
             };
 
             let username = match username {
                 Some(u) => u,
-                None => Input::new()
-                    .with_prompt("Username")
-                    .with_initial_text("")
-                    .interact_text()?,
+                None => {
+                    if non_interactive {
+                        anyhow::bail!("Missing required parameter: --username is required in non-interactive mode");
+                    }
+                    Input::new()
+                        .with_prompt("Username")
+                        .with_initial_text("")
+                        .interact_text()?
+                }
             };
 
             let password = match (password, generate) {
@@ -390,6 +417,9 @@ fn main() -> Result<()> {
                     pwd
                 }
                 (None, None) => {
+                    if non_interactive {
+                        anyhow::bail!("Missing password parameter: use --password or --generate in non-interactive mode");
+                    }
                     let should_generate = Confirm::new()
                         .with_prompt("Generate a strong password?")
                         .default(true)
@@ -411,33 +441,45 @@ fn main() -> Result<()> {
             let url = match url {
                 Some(u) => Some(u),
                 None => {
-                    let input: String = Input::new()
-                        .with_prompt("URL (optional)")
-                        .allow_empty(true)
-                        .interact_text()?;
-                    if input.is_empty() { None } else { Some(input) }
+                    if non_interactive {
+                        None
+                    } else {
+                        let input: String = Input::new()
+                            .with_prompt("URL (optional)")
+                            .allow_empty(true)
+                            .interact_text()?;
+                        if input.is_empty() { None } else { Some(input) }
+                    }
                 }
             };
 
             let category = match category {
                 Some(c) => Some(c),
                 None => {
-                    let input: String = Input::new()
-                        .with_prompt("Category (optional)")
-                        .allow_empty(true)
-                        .interact_text()?;
-                    if input.is_empty() { None } else { Some(input) }
+                    if non_interactive {
+                        None
+                    } else {
+                        let input: String = Input::new()
+                            .with_prompt("Category (optional)")
+                            .allow_empty(true)
+                            .interact_text()?;
+                        if input.is_empty() { None } else { Some(input) }
+                    }
                 }
             };
 
             let notes = match notes {
                 Some(n) => Some(n),
                 None => {
-                    let input: String = Input::new()
-                        .with_prompt("Notes (optional)")
-                        .allow_empty(true)
-                        .interact_text()?;
-                    if input.is_empty() { None } else { Some(input) }
+                    if non_interactive {
+                        None
+                    } else {
+                        let input: String = Input::new()
+                            .with_prompt("Notes (optional)")
+                            .allow_empty(true)
+                            .interact_text()?;
+                        if input.is_empty() { None } else { Some(input) }
+                    }
                 }
             };
 
@@ -469,7 +511,7 @@ fn main() -> Result<()> {
         Commands::List { category, search, show_passwords } => {
             log::info!("Listing passwords (category: {:?}, search: {:?})", category, search);
 
-            let db = open_database(&db_path, cli.master_password.clone())?;
+            let db = open_database(&db_path, cli.master_password.clone(), non_interactive)?;
             let entries = db.list_passwords()?;
 
             if entries.is_empty() {
@@ -507,7 +549,7 @@ fn main() -> Result<()> {
         }
 
         Commands::Get { title, copy, show_password } => {
-            let db = open_database(&db_path, cli.master_password.clone())?;
+            let db = open_database(&db_path, cli.master_password.clone(), non_interactive)?;
             let entries = db.list_passwords()?;
 
             // Try to find by ID first, then by title
@@ -530,7 +572,7 @@ fn main() -> Result<()> {
         }
 
         Commands::Search { query, username, url, category } => {
-            let db = open_database(&db_path, cli.master_password.clone())?;
+            let db = open_database(&db_path, cli.master_password.clone(), non_interactive)?;
             let _entries = db.list_passwords()?;
 
             let mut search_query = SearchQuery::new();
@@ -559,7 +601,7 @@ fn main() -> Result<()> {
         }
 
         Commands::Edit { title } => {
-            let db = open_database(&db_path, cli.master_password.clone())?;
+            let db = open_database(&db_path, cli.master_password.clone(), non_interactive)?;
             let entries = db.list_passwords()?;
 
             // Find entry to edit
@@ -577,6 +619,10 @@ fn main() -> Result<()> {
                     return Ok(());
                 }
             };
+
+            if non_interactive {
+                anyhow::bail!("Edit command requires interactive mode. Use shell mode or interactive CLI for editing.");
+            }
 
             println!("\nEditing: {}", entry.title.yellow());
             println!("{}", format_entry(&entry, false));
@@ -618,7 +664,7 @@ fn main() -> Result<()> {
         Commands::Delete { title, force } => {
             log::info!("Deleting password entry: title='{}', force={}", title, force);
 
-            let db = open_database(&db_path, cli.master_password.clone())?;
+            let db = open_database(&db_path, cli.master_password.clone(), non_interactive)?;
             let entries = db.list_passwords()?;
 
             let entry = if let Ok(id) = title.parse::<i64>() {
@@ -637,6 +683,11 @@ fn main() -> Result<()> {
             };
 
             if !force {
+                if non_interactive {
+                    log::info!("Delete confirmation required but not provided in non-interactive mode");
+                    anyhow::bail!("Delete requires --force flag in non-interactive mode to skip confirmation.");
+                }
+
                 println!("\nDeleting: {}", entry.title.yellow());
                 println!("{}", format_entry(&entry, false));
 
@@ -711,7 +762,7 @@ fn main() -> Result<()> {
         }
 
         Commands::Export { path, include_passwords } => {
-            let db = open_database(&db_path, cli.master_password.clone())?;
+            let db = open_database(&db_path, cli.master_password.clone(), non_interactive)?;
             let entries = db.list_passwords()?;
 
             let export_data: Vec<_> = entries.iter().map(|e| {
@@ -747,7 +798,7 @@ fn main() -> Result<()> {
             let json = std::fs::read_to_string(&path)?;
             let imported: Vec<serde_json::Value> = serde_json::from_str(&json)?;
 
-            let db = open_database(&db_path, cli.master_password.clone())?;
+            let db = open_database(&db_path, cli.master_password.clone(), non_interactive)?;
 
             for item in imported {
                 if let (Some(title), Some(username)) = (
@@ -782,6 +833,9 @@ fn main() -> Result<()> {
         }
 
         Commands::Shell => {
+            if non_interactive {
+                anyhow::bail!("Shell mode cannot be used with --non-interactive flag. Shell mode is inherently interactive.");
+            }
             run_interactive_shell(&db_path, cli.master_password)?;
         }
     }

@@ -1,259 +1,584 @@
 # PM CLI 非交互式模式说明
 
-## ✅ 重要更新
+## 🚀 快速开始
 
-从 v0.1.0 开始，**`--non-interactive` 选项已被移除**。
+从 v0.1.0 开始，PM CLI 提供了两种方式进入**非交互式模式**：
 
-### 原因
+1. **命令行标志**：`--non-interactive`
+2. **环境变量**：`PM_NON_INTERACTIVE=1`
 
-`--non-interactive` 选项实际上没有发挥作用，因为：
+在非交互式模式下，PM CLI 不会弹出任何交互式提示。如果缺少必需参数，命令会直接返回错误，而不是等待用户输入。
 
-1. **命令已经支持非交互式使用** - 如果所有参数都通过命令行提供，不会出现交互式提示
-2. **只在缺少必需参数时才提示** - 如果某些参数没有提供，才会使用 `dialoguer` 提示用户输入
-3. **简化了接口** - 移除不必要的参数，使 API 更简洁
+## 📋 使用场景
 
-### 新的工作方式
-
-现在 PM CLI 的工作方式更简单：
-
-- ✅ **如果所有参数通过命令行提供** → 完全非交互式，直接执行
-- ✅ **如果某些参数未提供** → 交互式提示用户输入缺失的参数
-- ✅ **如果没有提供主密码** → 交互式提示输入主密码（或使用 `PM_MASTER_PASSWORD` 环境变量）
-
-## 🚀 非交互式使用示例
-
-### 完整参数（完全非交互式）
+### GUI 应用集成
 
 ```bash
-# 添加密码 - 所有参数都提供了
-pm add \
-  --title "GitHub" \
-  --username "user@example.com" \
-  --password "MyPassword123!" \
-  --url "https://github.com" \
-  --category "Development" \
-  --notes "Main GitHub account"
-
-# 使用主密码环境变量
-export PM_MASTER_PASSWORD="your-master-password"
-pm add --title "GitHub" --username "user@example.com" --password "MyPassword123!"
-```
-
-### 自动生成密码（非交互式）
-
-```bash
-# 指定长度自动生成密码
-pm add \
-  --title "GitHub" \
-  --username "user@example.com" \
-  --generate 20
-```
-
-### 列出密码（非交互式）
-
-```bash
-# 列出所有密码
-export PM_MASTER_PASSWORD="your-master-password"
-pm list
-
-# 按类别过滤
-pm list --category "Development"
-
-# 搜索
-pm list --search "GitHub"
-```
-
-### 删除密码（非交互式）
-
-```bash
-# 使用 --force 跳过确认
-export PM_MASTER_PASSWORD="your-master-password"
-pm delete "GitHub" --force
-```
-
-### 导出/导入（非交互式）
-
-```bash
-# 导出
-export PM_MASTER_PASSWORD="your-master-password"
-pm export /path/to/backup.json
-
-# 导入
-export PM_MASTER_PASSWORD="your-master-password"
-pm import /path/to/backup.json
-```
-
-## 🎯 GUI 集成指南
-
-### 前端集成
-
-在 GUI 应用中调用 PM CLI 时，只需提供所有必需参数：
-
-```javascript
-// 前端示例
+# JavaScript / Node.js
 const { spawn } = require('child_process');
 
-// 设置环境变量
 const env = {
   ...process.env,
-  PM_MASTER_PASSWORD: masterPassword
+  PM_MASTER_PASSWORD: masterPassword,
+  PM_NON_INTERACTIVE: '1'  // 启用非交互模式
 };
 
-// 添加密码
 const args = [
   'add',
   '--title', title,
   '--username', username,
   '--password', password,
-  '--url', url,
-  '--category', category,
-  '--notes', notes
 ];
 
 spawn('pm', args, { env });
 ```
 
-### Tauri 集成
+### 自动化脚本
 
-在 Tauri 应用中：
+```bash
+#!/bin/bash
+export PM_MASTER_PASSWORD="$(get-password-from-keyring)"
+export PM_NON_INTERACTIVE=1
 
-```rust
-// Rust backend
-use std::process::Command;
+# 添加密码
+pm add --title "GitHub" --username "user" --password "pwd123"
 
-let result = Command::new("pm")
-    .args(&[
-        "add",
-        "--title", &title,
-        "--username", &username,
-        "--password", &password,
-    ])
-    .env("PM_MASTER_PASSWORD", &master_password)
-    .output()?;
+# 删除密码（无需 --force，因为非交互模式下不允许交互）
+pm delete "GitHub" --force
+
+# 列出密码
+pm list
 ```
 
-## 📝 主密码传递
+### CI/CD 管道
+
+```yaml
+# GitHub Actions 示例
+- name: Add password
+  env:
+    PM_MASTER_PASSWORD: ${{ secrets.MASTER_PASSWORD }}
+    PM_NON_INTERACTIVE: "1"
+  run: |
+    pm add --title "Database" --username "admin" --password "${{ secrets.DB_PASSWORD }}"
+```
+
+## 🔧 命令详解
+
+### 初始化数据库
+
+```bash
+# 交互式模式（默认）
+pm init
+# 如果数据库已存在，会提示是否覆盖
+
+# 非交互式模式
+pm --non-interactive init
+# 如果数据库已存在，会报错
+
+# 非交互式模式 + 强制覆盖
+pm --non-interactive init --force
+# 无提示直接覆盖
+```
+
+### 添加密码
+
+```bash
+# 交互式模式 - 缺少参数时提示输入
+pm add --title "GitHub"
+# 提示: Username: [输入]
+# 提示: Generate a strong password? [Y/n]: [选择]
+
+# 非交互式模式 - 缺少参数时报错
+pm --non-interactive add --title "GitHub"
+# Error: Missing required parameter: --username is required in non-interactive mode
+
+# 非交互式模式 - 提供所有参数
+pm --non-interactive add \
+  --title "GitHub" \
+  --username "user@example.com" \
+  --password "MyPassword123!"
+
+# 使用自动生成
+pm --non-interactive add \
+  --title "GitHub" \
+  --username "user@example.com" \
+  --generate 20
+```
+
+**必需参数**（非交互模式）：
+- `--title` - 条目标题
+- `--username` - 用户名
+- `--password` 或 `--generate` - 密码或生成长度
+
+**可选参数**（不提供时使用默认值）：
+- `--url` - URL（默认：None）
+- `--category` - 分类（默认：None）
+- `--notes` - 备注（默认：None）
+
+### 列出密码
+
+```bash
+# 交互式模式 - 可能提示输入主密码
+pm list
+
+# 非交互式模式 - 必须提供主密码
+export PM_MASTER_PASSWORD="your-password"
+pm --non-interactive list
+
+# 按类别过滤
+pm --non-interactive list --category "Development"
+
+# 搜索
+pm --non-interactive list --search "GitHub"
+```
+
+### 获取密码
+
+```bash
+# 交互式模式
+pm get "GitHub"
+
+# 非交互式模式
+export PM_MASTER_PASSWORD="your-password"
+pm --non-interactive get "GitHub"
+
+# 复制到剪贴板
+pm --non-interactive get "GitHub" --copy
+```
+
+### 搜索密码
+
+```bash
+# 交互式模式
+pm search "github"
+
+# 非交互式模式
+export PM_MASTER_PASSWORD="your-password"
+pm --non-interactive search "github"
+
+# 按用户名搜索
+pm --non-interactive search "user@example.com" --username
+
+# 按URL搜索
+pm --non-interactive search "github.com" --url
+
+# 按分类搜索
+pm --non-interactive search "Dev" --category
+```
+
+### 编辑密码
+
+```bash
+# ⚠️ 注意：Edit 命令需要交互式模式
+
+# 交互式模式
+pm edit "GitHub"
+# 提示: Title [GitHub]: [修改或保持]
+
+# 非交互式模式 - 不支持
+pm --non-interactive edit "GitHub"
+# Error: Edit command requires interactive mode. Use shell mode or interactive CLI for editing.
+```
+
+**原因**：编辑命令需要用户提供新值或选择保持原值，不适合非交互式模式。
+
+### 删除密码
+
+```bash
+# 交互式模式 - 确认删除
+pm delete "GitHub"
+# 提示: Are you sure you want to delete this entry? [y/N]: [确认]
+
+# 非交互式模式 - 必须使用 --force
+pm --non-interactive delete "GitHub" --force
+
+# 非交互式模式 - 缺少 --force 报错
+pm --non-interactive delete "GitHub"
+# Error: Delete requires --force flag in non-interactive mode to skip confirmation.
+```
+
+### 生成密码
+
+```bash
+# 交互式模式
+pm generate --length 20
+
+# 非交互式模式
+pm --non-interactive generate --length 20
+
+# 不需要数据库访问
+```
+
+### 检查密码强度
+
+```bash
+# 交互式模式
+pm strength "MyPassword123!"
+
+# 非交互式模式
+pm --non-interactive strength "MyPassword123!"
+
+# 不需要数据库访问
+```
+
+### 导出数据库
+
+```bash
+# 交互式模式 - 可能提示输入主密码
+pm export backup.json
+
+# 非交互式模式 - 必须提供主密码
+export PM_MASTER_PASSWORD="your-password"
+pm --non-interactive export backup.json
+
+# 导出包含密码
+pm --non-interactive export backup.json --include-passwords
+```
+
+### 导入数据库
+
+```bash
+# 交互式模式 - 可能提示输入主密码
+pm import backup.json
+
+# 非交互式模式 - 必须提供主密码
+export PM_MASTER_PASSWORD="your-password"
+pm --non-interactive import backup.json
+```
+
+### 交互式 Shell
+
+```bash
+# ⚠️ 注意：Shell 模式与非交互模式不兼容
+
+# 交互式模式
+pm shell
+# 进入交互式 shell
+
+# 非交互式模式 - 不支持
+pm --non-interactive shell
+# Error: Shell mode cannot be used with --non-interactive flag. Shell mode is inherently interactive.
+```
+
+## 🎯 主密码传递方式
 
 ### 方式一：环境变量（推荐）
 
 ```bash
 export PM_MASTER_PASSWORD="your-master-password"
-pm add --title "GitHub" --username "user@example.com" --password "MyPassword123!"
+pm --non-interactive add --title "GitHub" --username "user" --password "pwd123"
 ```
 
 ### 方式二：命令行参数（不推荐）
 
 ```bash
-pm add \
+pm --non-interactive \
   --master-password "your-master-password" \
+  add --title "GitHub" --username "user" --password "pwd123"
+```
+
+**⚠️ 注意**：命令行方式不推荐，因为密码会出现在进程列表和命令历史中。
+
+### 方式三：在子 shell 中设置（最安全）
+
+```bash
+(PM_MASTER_PASSWORD="$(get-password)" pm --non-interactive list)
+```
+
+## 📊 命令对比表
+
+| 命令 | 交互模式 | 非交互模式 | 特殊要求 |
+|------|---------|-----------|---------|
+| `init` | ✅ 提示覆盖 | ✅ `--force` 强制 | 非交互模式需要 `--force` 跳过确认 |
+| `add` | ✅ 提示缺失参数 | ✅ 必需 `--title`, `--username`, `--password`/`--generate` | 可选参数：`--url`, `--category`, `--notes` |
+| `list` | ✅ | ✅ | 需要主密码 |
+| `get` | ✅ | ✅ | 需要主密码 |
+| `search` | ✅ | ✅ | 需要主密码 |
+| `edit` | ✅ | ❌ 不支持 | 交互式操作 |
+| `delete` | ✅ 确认删除 | ✅ 必需 `--force` | 跳过确认 |
+| `generate` | ✅ | ✅ | 不需要数据库 |
+| `strength` | ✅ | ✅ | 不需要数据库 |
+| `export` | ✅ | ✅ | 需要主密码 |
+| `import` | ✅ | ✅ | 需要主密码 |
+| `shell` | ✅ | ❌ 不支持 | 完全交互式 |
+
+## 💡 最佳实践
+
+### 1. GUI 应用集成
+
+```javascript
+// ✅ 正确做法
+const env = {
+  PM_MASTER_PASSWORD: password,
+  PM_NON_INTERACTIVE: '1'
+};
+
+spawn('pm', ['add', '--title', title, '--username', username, '--password', password], { env });
+
+// ❌ 错误做法 - 会弹出提示
+spawn('pm', ['add', '--title', title, '--username', username]);
+```
+
+### 2. 自动化脚本
+
+```bash
+#!/bin/bash
+
+# ✅ 正确做法 - 非交互模式
+export PM_MASTER_PASSWORD="$(pass show pm-master)"
+export PM_NON_INTERACTIVE=1
+
+pm add --title "Service" --username "user" --password "$(pass show service/pwd)"
+pm delete "Old Entry" --force
+
+# ❌ 错误做法 - 可能卡住等待输入
+pm add --title "Service" --username "user"
+```
+
+### 3. 安全注意事项
+
+```bash
+# ✅ 好的做法 - 子 shell 中设置环境变量
+(PM_MASTER_PASSWORD="$(pass show pm)" pm --non-interactive list)
+
+# ❌ 不好的做法 - 密码可能泄露到进程列表
+pm --non-interactive --master-password "secret123" list
+
+# ✅ 好的做法 - 使用密钥管理工具
+PM_MASTER_PASSWORD="$(aws secretsmanager get-secret-value --secret-id pm-master --query SecretString --output text)" \
+  pm --non-interactive list
+```
+
+### 4. 错误处理
+
+```python
+import subprocess
+import json
+
+def add_password(title, username, password, master_password):
+    env = {
+        'PM_MASTER_PASSWORD': master_password,
+        'PM_NON_INTERACTIVE': '1'
+    }
+
+    result = subprocess.run(
+        ['pm', 'add', '--title', title, '--username', username, '--password', password],
+        env={**os.environ, **env},
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        # 处理错误
+        raise Exception(f"Failed to add password: {result.stderr}")
+
+    return result.stdout
+```
+
+## 🚨 常见错误
+
+### 错误 1: 缺少必需参数
+
+```bash
+pm --non-interactive add --title "GitHub"
+# Error: Missing required parameter: --username is required in non-interactive mode
+```
+
+**解决**：提供所有必需参数
+```bash
+pm --non-interactive add \
   --title "GitHub" \
   --username "user@example.com" \
   --password "MyPassword123!"
 ```
 
-**⚠️ 注意：** 命令行方式不推荐，因为密码会出现在进程列表和命令历史中。
-
-### 方式三：交互式提示（仅 CLI 使用）
-
-如果没有提供主密码，PM CLI 会交互式提示用户输入：
+### 错误 2: 缺少主密码
 
 ```bash
-pm list
-# 会提示: Enter master password: [隐藏输入]
+pm --non-interactive list
+# Error: Master password not provided. Use --master-password argument or PM_MASTER_PASSWORD environment variable in non-interactive mode.
 ```
 
-## 🔧 交互式使用示例
-
-### 添加密码（交互式）
-
+**解决**：设置主密码环境变量
 ```bash
-# 只提供部分参数，其他参数会提示输入
-pm add --title "GitHub"
-# 提示: Username: [输入]
-# 提示: Generate a strong password? [Y/n]: [选择]
-# 提示: Password: [如果选择不自动生成]
-# 提示: URL (optional): [输入或跳过]
-# 提示: Category (optional): [输入或跳过]
+export PM_MASTER_PASSWORD="your-password"
+pm --non-interactive list
 ```
 
-### 编辑密码（交互式）
+### 错误 3: 删除缺少 --force
 
 ```bash
-# 只提供标题，其他字段会提示修改
+pm --non-interactive delete "GitHub"
+# Error: Delete requires --force flag in non-interactive mode to skip confirmation.
+```
+
+**解决**：添加 `--force` 标志
+```bash
+pm --non-interactive delete "GitHub" --force
+```
+
+### 错误 4: 使用不支持的命令
+
+```bash
+pm --non-interactive edit "GitHub"
+# Error: Edit command requires interactive mode. Use shell mode or interactive CLI for editing.
+```
+
+**解决**：在交互式模式下使用 `edit` 命令
+```bash
 pm edit "GitHub"
-# 显示当前信息
-# 提示: Title [GitHub]: [按Enter保持不变或输入新值]
-# 提示: Username [user@example.com]: [按Enter保持不变或输入新值]
-# 提示: Password (press Enter to keep current): [按Enter保持或输入新密码]
 ```
 
-## 💡 最佳实践
-
-### 1. GUI 集成
-
-✅ **使用环境变量传递主密码**
-✅ **提供所有必需参数**
-✅ **不依赖交互式提示**
-
-### 2. 脚本自动化
-
-✅ **在脚本开头设置 `PM_MASTER_PASSWORD`**
-✅ **使用完整参数避免提示**
-✅ **使用 `--force` 跳过确认**
+### 错误 5: 数据库已存在
 
 ```bash
-#!/bin/bash
-export PM_MASTER_PASSWORD="$(get-password-from-keyring)"
-
-# 添加密码
-pm add --title "GitHub" --username "user" --password "pwd123"
-
-# 删除密码（跳过确认）
-pm delete "GitHub" --force
+pm --non-interactive init
+# Error: Database already exists at /home/user/.pm.db. Use --force to overwrite or remove it manually.
 ```
 
-### 3. 安全注意事项
-
-❌ **不要在命令行中传递密码**（会出现在进程列表和 shell 历史）
-❌ **不要在日志中记录密码**
-❌ **不要在不信任的环境中设置 `PM_MASTER_PASSWORD`**
-
-✅ **使用环境变量传递敏感信息**
-✅ **使用密钥管理工具存储主密码**
-✅ **在子 shell 中设置环境变量**
-
+**解决**：添加 `--force` 标志
 ```bash
-# ✅ 好的做法
-(PM_MASTER_PASSWORD="$(get-password)" pm list)
-
-# ❌ 不好的做法
-echo "PM_MASTER_PASSWORD=secret123" >> ~/.bashrc
+pm --non-interactive init --force
 ```
 
 ## 🔄 迁移指南
 
 ### 从旧版本迁移
 
-如果你之前使用 `--non-interactive`，现在只需移除它：
+如果你之前没有使用 `--non-interactive`，现在可以直接使用：
 
 ```bash
-# ❌ 旧版本（已废弃）
+# ✅ 新版本
+export PM_MASTER_PASSWORD="your-password"
 pm --non-interactive add --title "GitHub" --username "user" --password "pwd123"
-
-# ✅ 新版本（推荐）
-pm add --title "GitHub" --username "user" --password "pwd123"
 ```
 
-### 不需要的改变
+### 从交互式迁移到非交互式
 
-只要你的代码/脚本已经提供所有必需参数，就不需要做任何改变！
+如果你有一个交互式脚本，想改为非交互式：
 
 ```bash
-# 这些命令一直都能工作，现在更简洁了
-export PM_MASTER_PASSWORD="your-password"
-pm add --title "GitHub" --username "user" --password "pwd123"
-pm list
-pm delete "GitHub" --force
+# ❌ 旧方式（交互式）
+echo "Enter password:"
+read password
+pm add --title "GitHub" --username "user"
+
+# ✅ 新方式（非交互式）
+password="your-password"
+pm --non-interactive add --title "GitHub" --username "user" --password "$password"
+```
+
+## 📚 集成示例
+
+### Tauri (Rust)
+
+```rust
+use std::process::Command;
+
+fn add_password(title: &str, username: &str, password: &str, master_password: &str) -> Result<String, String> {
+    let output = Command::new("pm")
+        .args(&[
+            "add",
+            "--title", title,
+            "--username", username,
+            "--password", password,
+            "--non-interactive"
+        ])
+        .env("PM_MASTER_PASSWORD", master_password)
+        .output()
+        .map_err(|e| format!("Failed to execute pm: {}", e))?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+```
+
+### Electron (JavaScript)
+
+```javascript
+const { spawn } = require('child_process');
+
+function addPassword(title, username, password, masterPassword) {
+  return new Promise((resolve, reject) => {
+    const env = {
+      ...process.env,
+      PM_MASTER_PASSWORD: masterPassword,
+      PM_NON_INTERACTIVE: '1'
+    };
+
+    const args = [
+      'add',
+      '--title', title,
+      '--username', username,
+      '--password', password
+    ];
+
+    const process = spawn('pm', args, { env });
+
+    let stdout = '';
+    let stderr = '';
+
+    process.stdout.on('data', (data) => {
+      stdout += data;
+    });
+
+    process.stderr.on('data', (data) => {
+      stderr += data;
+    });
+
+    process.on('close', (code) => {
+      if (code === 0) {
+        resolve(stdout);
+      } else {
+        reject(new Error(stderr || `Process exited with code ${code}`));
+      }
+    });
+  });
+}
+```
+
+### Python
+
+```python
+import subprocess
+import os
+
+def add_password(title: str, username: str, password: str, master_password: str) -> str:
+    env = {
+        **os.environ,
+        'PM_MASTER_PASSWORD': master_password,
+        'PM_NON_INTERACTIVE': '1'
+    }
+
+    result = subprocess.run(
+        ['pm', 'add', '--title', title, '--username', username, '--password', password],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True
+    )
+
+    return result.stdout
+
+def delete_password(title: str, master_password: str) -> str:
+    env = {
+        **os.environ,
+        'PM_MASTER_PASSWORD': master_password,
+        'PM_NON_INTERACTIVE': '1'
+    }
+
+    result = subprocess.run(
+        ['pm', 'delete', title, '--force'],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True
+    )
+
+    return result.stdout
 ```
 
 ## 📚 参考文档
@@ -264,4 +589,4 @@ pm delete "GitHub" --force
 
 ---
 
-**总结：** 移除 `--non-interactive` 后，PM CLI 的使用更简单自然。如果提供所有参数，它就是非交互式的；如果缺少参数，它会智能地提示用户输入。这样既支持自动化脚本，也保持了良好的用户体验。
+**总结**：`--non-interactive` 标志和 `PM_NON_INTERACTIVE` 环境变量让 PM CLI 完全自动化，非常适合 GUI 应用、自动化脚本和 CI/CD 管道。在非交互模式下，所有必需参数都必须通过命令行提供，不会出现任何交互式提示。
